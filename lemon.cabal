@@ -1,0 +1,33 @@
+name: lemon
+version: 0
+synopsis: Rock Paper Scissors server
+description:
+    Rock Paper Scissors server
+
+homepage: https://github.com/lfairy/lemon
+author: Chris Wong
+maintainer: lambda.fairy@gmail.com
+copyright: 2015 Chris Wong
+license: Apache-2.0
+category: Network, Web
+
+build-type: Simple
+cabal-version: >= 1.10
+extra-source-files: README.md
+
+library
+    exposed-modules:
+        Lemon.Parse
+        Lemon.Render
+        Lemon.Types
+    build-depends:
+        base >= 4.8 && < 5,
+        attoparsec,
+        bytestring,
+        text
+    default-language: Haskell2010
+    ghc-options: -Wall
+
+source-repository head
+    type: git
+    location: https://github.com/lfairy/lemon.git
