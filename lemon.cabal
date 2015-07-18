@@ -17,9 +17,11 @@ extra-source-files: README.md
 
 library
     exposed-modules:
-        Lemon.Parse
-        Lemon.Render
-        Lemon.Types
+        Lemon.Protocol
+    other-modules:
+        Lemon.Protocol.Parse
+        Lemon.Protocol.Render
+        Lemon.Protocol.Types
     build-depends:
         base >= 4.8 && < 5,
         attoparsec,

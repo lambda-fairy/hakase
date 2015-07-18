@@ -1,6 +1,6 @@
 {-# LANGUAGE FlexibleInstances, OverloadedStrings, ScopedTypeVariables, TypeOperators #-}
 
-module Lemon.Parse where
+module Lemon.Protocol.Parse where
 
 
 import Control.Applicative
@@ -15,7 +15,7 @@ import Data.Word
 import GHC.Generics
 import Text.Read
 
-import Lemon.Types
+import Lemon.Protocol.Types
 
 
 parseMessage :: Parser Message

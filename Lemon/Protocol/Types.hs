@@ -1,6 +1,6 @@
 {-# LANGUAGE DeriveDataTypeable, DeriveGeneric #-}
 
-module Lemon.Types where
+module Lemon.Protocol.Types where
 
 
 import Data.ByteString (ByteString)

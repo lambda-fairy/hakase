@@ -1,6 +1,6 @@
 {-# LANGUAGE FlexibleInstances, OverloadedStrings, ScopedTypeVariables, TypeOperators #-}
 
-module Lemon.Render where
+module Lemon.Protocol.Render where
 
 
 import Data.ByteString (ByteString)
@@ -11,7 +11,7 @@ import qualified Data.Text.Encoding as T
 import Data.Word
 import GHC.Generics
 
-import Lemon.Types
+import Lemon.Protocol.Types
 
 
 renderMessage :: Message -> ByteString
