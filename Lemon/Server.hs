@@ -48,9 +48,9 @@ send player message = do
 
 
 play :: Word32 -> Game [(Move, Move)]
-play totalMoves = bracket_ introduction denouement $ loop totalMoves
+play totalMoves = bracket_ exposition denouement $ loop totalMoves
   where
-    introduction = do
+    exposition = do
         startMessage <- Start totalMoves <$> name White <*> name Black
         send White startMessage
         send Black startMessage
@@ -60,7 +60,7 @@ play totalMoves = bracket_ introduction denouement $ loop totalMoves
 
 
 loop :: Word32 -> Game [(Move, Move)]
-loop movesLeft = replicateM (fromIntegral movesLeft) $ do
+loop totalMoves = replicateM (fromIntegral totalMoves) $ do
     whiteMove <- receiveMove White
     blackMove <- receiveMove Black
     return (whiteMove, blackMove)
