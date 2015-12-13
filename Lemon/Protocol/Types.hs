@@ -12,12 +12,20 @@ import GHC.Generics
 data Message
     = Ayy !Word32 !Text !ByteString
     | Lmao !Word32 !Text
-    | Come !Word32
-    | Move !Move
-    | Reply !Move
+    | Start !Word32 !Text !Text
+    | Move !Player !Move
     | Done
     | Error !Error
     deriving (Show, Generic)
+
+
+data Player = White | Black
+    deriving (Eq, Ord, Bounded, Enum, Show)
+
+
+other :: Player -> Player
+other White = Black
+other Black = White
 
 
 data Move = Rock | Paper | Scissors

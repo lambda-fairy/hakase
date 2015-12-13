@@ -37,6 +37,9 @@ instance Parse ByteString where
             then Just $! n + 1
             else Nothing
 
+instance Parse Player where
+    parse = White <$ "0" <|> Black <$ "1"
+
 instance Parse Move where
     parse = Rock <$ "0" <|> Paper <$ "1" <|> Scissors <$ "2"
 

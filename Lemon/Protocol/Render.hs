@@ -30,6 +30,11 @@ instance Render Text where
 instance Render ByteString where
     render = id
 
+instance Render Player where
+    render p = case p of
+        White -> "0"
+        Black -> "1"
+
 instance Render Move where
     render m = case m of
         Rock -> "0"

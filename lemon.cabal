@@ -18,6 +18,7 @@ extra-source-files: README.md
 library
     exposed-modules:
         Lemon.Protocol
+        Lemon.Server
     other-modules:
         Lemon.Protocol.Parse
         Lemon.Protocol.Render
@@ -26,7 +27,10 @@ library
         base >= 4.8 && < 5,
         attoparsec,
         bytestring,
-        text
+        connection,
+        exceptions,
+        text,
+        transformers
     default-language: Haskell2010
     ghc-options: -Wall
 

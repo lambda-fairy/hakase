@@ -1,5 +1,7 @@
 module Lemon.Protocol (
     Message(..),
+    Player(..),
+    other,
     Move(..),
     Error(..),
     KnownError(..),
