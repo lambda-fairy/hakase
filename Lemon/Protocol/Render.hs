@@ -15,7 +15,7 @@ import Lemon.Protocol.Types
 
 
 renderMessage :: Message -> ByteString
-renderMessage = grender . from
+renderMessage = (<> "\r\n") . grender . from
 
 
 class Render a where

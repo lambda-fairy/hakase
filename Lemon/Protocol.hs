@@ -1,11 +1,12 @@
 module Lemon.Protocol (
+    protocolVersion,
     Message(..),
     Player(..),
     other,
     Move(..),
     Error(..),
     KnownError(..),
-    parseMessage,
+    messageParser,
     renderMessage,
     ) where
 

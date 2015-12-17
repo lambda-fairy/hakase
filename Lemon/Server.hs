@@ -2,76 +2,93 @@ module Lemon.Server where
 
 
 import Control.Concurrent
-import Control.Monad
 import Control.Monad.Catch
 import Control.Monad.Trans.Class
 import Control.Monad.Trans.Reader
-import Data.Text (Text)
+import Data.IORef
+import Data.Sequence (Seq)
+import qualified Data.Sequence as Seq
 import Data.Word
+import Network.Simple.TCP
+import System.IO.Error
+import qualified System.IO.Streams as S
+import qualified System.IO.Streams.Attoparsec as S
+import System.Random.TF.Gen
+import System.Random.TF.Init
+import System.Random.TF.Instances
 
+import Control.Concurrent.ThreadSet
 import Lemon.Protocol
+import Lemon.Server.Common
+import Lemon.Server.Game
 
 
-data PlayerState = PlayerState {
-    playerName :: Text,
-    playerReceive :: IO Message,
-    playerSend :: Message -> IO ()
-    }
-
-
-type Game = ReaderT (PlayerState, PlayerState) IO
-
-
-data GameOver = GameOver
-    deriving Show
-
-instance Exception GameOver
-
-
-getPlayer :: Player -> Game PlayerState
-getPlayer White = asks fst
-getPlayer Black = asks snd
-
-
-name :: Player -> Game Text
-name = fmap playerName . getPlayer
-
-
-receive :: Player -> Game Message
-receive = lift . playerReceive <=< getPlayer
-
-
-send :: Player -> Message -> Game ()
-send player message = do
-    s <- getPlayer player
-    lift $ playerSend s message
-
-
-play :: Word32 -> Game [(Move, Move)]
-play totalMoves = bracket_ exposition denouement $ loop totalMoves
+runServer :: HostPreference -> ServiceName -> IO ()
+runServer host port =
+    withMatchmaker $ \registerPlayer ->
+    serve host port $ \(sock, _addr) -> do
+        (is, os) <- S.socketToStreams sock
+        is' <- S.parserToInputStream messageParser is
+        os' <- S.contramap renderMessage os
+        nameRef <- newIORef $ error "player name not set"
+        let playerState = PlayerState {
+            playerName = nameRef,
+            playerReceive = S.read is' >>= maybe (throwM eofError) return,
+            playerSend = \m -> S.write (Just m) os'
+            }
+        runSession (login registerPlayer) playerState
   where
-    exposition = do
-        startMessage <- Start totalMoves <$> name White <*> name Black
-        send White startMessage
-        send Black startMessage
-    denouement = do
-        send White Done
-        send Black Done
+    eofError = mkIOError eofErrorType "end of stream" Nothing Nothing
 
 
-loop :: Word32 -> Game [(Move, Move)]
-loop totalMoves = replicateM (fromIntegral totalMoves) $ do
-    whiteMove <- receiveMove White
-    blackMove <- receiveMove Black
-    return (whiteMove, blackMove)
+withMatchmaker :: ((PlayerState -> IO ()) -> IO a) -> IO a
+withMatchmaker k =
+    bracket forkMatchmaker
+            (\(_, tid) -> killThread tid)
+            (\(register, _) -> k register)
+
+
+forkMatchmaker :: IO (PlayerState -> IO (), ThreadId)
+forkMatchmaker = do
+    chan <- newEmptyMVar
+    rng <- newIORef =<< newTFGen
+    tid <- forkIOWithThreadSet (loop Seq.empty chan rng)
+    return (putMVar chan, tid)
   where
-    receiveMove player = receive player >>= \m -> case m of
-        Move player' move | player == player' ->
-            send (other player) m >> return move
-        _ -> kick player InvalidCommand
+    loop lobby chan rng ts
+        | Seq.length lobby >= 10 = do
+            (white, lobby') <- atomicModifyIORef' rng (choose lobby)
+            (black, lobby'') <- atomicModifyIORef' rng (choose lobby')
+            _ <- fork ts $ do
+                -- TODO: Do something with the results
+                _ <- play numberOfMoves white black
+                return ()
+            loop lobby'' chan rng ts
+        | otherwise = do
+            newPlayer <- takeMVar chan
+            loop (newPlayer Seq.<| lobby) chan rng ts
 
 
-kick :: Player -> KnownError -> Game a
-kick player err = do
-    send player $ Error (KnownError err)
-    throwM GameOver
+login :: (PlayerState -> IO ()) -> Session ()
+login registerPlayer = do
+    -- TODO: check secret
+    (name, _) <- receive >>= \m -> case m of
+        Ayy version name secret
+            | version == protocolVersion -> return (name, secret)
+            | otherwise -> kick MismatchedVersion
+        _ -> kick InvalidCommand
+    setName name
+    ask >>= lift . registerPlayer
+
+
+choose :: RandomGen g => Seq a -> g -> (g, (a, Seq a))
+choose xs g =
+    let (i, g') = randomR (0, Seq.length xs - 1) g
+        (l, r) = Seq.splitAt i xs
+        x Seq.:< r' = Seq.viewl r
+    in (g', (x, l Seq.>< r'))
+
+
+-- TODO: make this configurable
+numberOfMoves :: Word32
+numberOfMoves = 100

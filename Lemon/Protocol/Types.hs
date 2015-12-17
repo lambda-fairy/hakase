@@ -9,6 +9,10 @@ import Data.Word
 import GHC.Generics
 
 
+protocolVersion :: Word32
+protocolVersion = 0
+
+
 data Message
     = Ayy !Word32 !Text !ByteString
     | Lmao !Word32 !Text

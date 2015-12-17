@@ -18,8 +18,12 @@ import Text.Read
 import Lemon.Protocol.Types
 
 
-parseMessage :: Parser Message
-parseMessage = to <$> gparse
+messageParser :: Parser (Maybe Message)
+messageParser = many nl *>
+    (Just <$> rawMessage <* nl <|> Nothing <$ P.endOfInput)
+  where
+    rawMessage = to <$> gparse
+    nl = "\n" <|> "\r\n"
 
 
 class Parse a where
