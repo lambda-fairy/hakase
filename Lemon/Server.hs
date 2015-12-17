@@ -33,7 +33,13 @@ runServer host port =
         nameRef <- newIORef $ error "player name not set"
         let playerState = PlayerState {
             playerName = nameRef,
-            playerReceive = S.read is' >>= maybe (throwM eofError) return,
+            playerReceive = do
+                r <- try (S.read is')
+                case r of
+                    Left (S.ParseException _) ->
+                        runSession (kick InvalidCommand) playerState
+                    Right Nothing -> throwM eofError
+                    Right (Just m) -> return m,
             playerSend = \m -> S.write (Just m) os'
             }
         runSession (login registerPlayer) playerState
