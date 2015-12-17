@@ -4,13 +4,21 @@ module Lemon.Protocol.Types where
 
 
 import Data.ByteString (ByteString)
+import qualified Data.Text as Text
 import Data.Text (Text)
+import Data.Version
 import Data.Word
 import GHC.Generics
+
+import qualified Paths_lemon
 
 
 protocolVersion :: Word32
 protocolVersion = 0
+
+
+serverVersion :: Text
+serverVersion = Text.pack $ "Lemon/" ++ showVersion Paths_lemon.version
 
 
 data Message

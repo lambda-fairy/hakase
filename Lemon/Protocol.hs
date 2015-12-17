@@ -1,5 +1,6 @@
 module Lemon.Protocol (
     protocolVersion,
+    serverVersion,
     Message(..),
     Player(..),
     other,

@@ -9,7 +9,7 @@ import Data.IORef
 import Data.Sequence (Seq)
 import qualified Data.Sequence as Seq
 import Data.Word
-import Network.Simple.TCP
+import Network.Simple.TCP (HostPreference, ServiceName, serve)
 import System.IO.Error
 import qualified System.IO.Streams as S
 import qualified System.IO.Streams.Attoparsec as S
@@ -84,6 +84,7 @@ login registerPlayer = do
             | otherwise -> kick MismatchedVersion
         _ -> kick InvalidCommand
     setName name
+    send $ Lmao protocolVersion serverVersion
     ask >>= lift . registerPlayer
 
 
