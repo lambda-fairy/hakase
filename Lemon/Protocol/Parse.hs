@@ -37,7 +37,7 @@ instance Parse Text where
 
 instance Parse ByteString where
     parse = P.scan (0 :: Int) $ \n c ->
-        if n < 1024 && c /= ':'
+        if n < 1024 && c /= ':' && c /= '\r' && c /= '\n'
             then Just $! n + 1
             else Nothing
 
