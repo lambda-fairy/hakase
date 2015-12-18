@@ -58,7 +58,7 @@ forkMatchmaker :: IO (PlayerState -> IO (), ThreadId)
 forkMatchmaker = do
     chan <- newEmptyMVar
     rng <- newIORef =<< newTFGen
-    tid <- forkIOWithThreadSet (loop Seq.empty chan rng)
+    tid <- forkIO $ withThreadSet (loop Seq.empty chan rng)
     return (putMVar chan, tid)
   where
     loop lobby chan rng ts

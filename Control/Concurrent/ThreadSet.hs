@@ -1,6 +1,5 @@
 module Control.Concurrent.ThreadSet (
     withThreadSet,
-    forkIOWithThreadSet,
     fork,
     newThreadSet,
     killThreadSet,
@@ -20,12 +19,6 @@ newtype ThreadSet = TS (IORef (Set ThreadId))
 
 withThreadSet :: (ThreadSet -> IO a) -> IO a
 withThreadSet = bracket newThreadSet killThreadSet
-
-
-forkIOWithThreadSet :: (ThreadSet -> IO ()) -> IO ThreadId
-forkIOWithThreadSet k = do
-    ts <- newThreadSet
-    forkFinally (k ts) (\_ -> killThreadSet ts)
 
 
 fork :: ThreadSet -> IO () -> IO ThreadId
