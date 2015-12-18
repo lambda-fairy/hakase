@@ -16,7 +16,8 @@ type Session = ReaderT PlayerState IO
 data PlayerState = PlayerState {
     playerName :: IORef Text,
     playerReceive :: IO Message,
-    playerSend :: Message -> IO ()
+    playerSend :: Message -> IO (),
+    playerClose :: IO ()
     }
 
 

@@ -2,6 +2,7 @@ module Lemon.Server where
 
 
 import Control.Concurrent
+import Control.Monad
 import Control.Monad.Catch
 import Control.Monad.Trans.Class
 import Control.Monad.Trans.Reader
@@ -31,6 +32,7 @@ runServer host port =
         is' <- S.parserToInputStream messageParser is
         os' <- S.contramap renderMessage os
         nameRef <- newIORef $ error "player name not set"
+        closeFlag <- newEmptyMVar
         let playerState = PlayerState {
             playerName = nameRef,
             playerReceive = do
@@ -40,9 +42,11 @@ runServer host port =
                         runSession (kick InvalidCommand) playerState
                     Right Nothing -> throwM eofError
                     Right (Just m) -> return m,
-            playerSend = \m -> S.write (Just m) os'
+            playerSend = \m -> S.write (Just m) os',
+            playerClose = void $ tryPutMVar closeFlag ()
             }
         runSession (login registerPlayer) playerState
+        takeMVar closeFlag
   where
     eofError = mkIOError eofErrorType "end of stream" Nothing Nothing
 
@@ -67,7 +71,8 @@ forkMatchmaker = do
             (black, lobby'') <- atomicModifyIORef' rng (choose lobby')
             _ <- fork ts $ do
                 -- TODO: Do something with the results
-                _ <- play numberOfMoves white black
+                _ <- play numberOfMoves white black `finally`
+                    (playerClose white >> playerClose black)
                 return ()
             loop lobby'' chan rng ts
         | otherwise = do
