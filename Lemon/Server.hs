@@ -90,7 +90,7 @@ login registerPlayer = do
         _ -> kick InvalidCommand
     setName name
     send $ Lmao protocolVersion serverVersion
-    ask >>= lift . registerPlayer
+    lift . registerPlayer =<< ask
 
 
 choose :: RandomGen g => Seq a -> g -> (g, (a, Seq a))
