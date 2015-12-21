@@ -62,22 +62,38 @@ forkMatchmaker :: IO (PlayerState -> IO (), ThreadId)
 forkMatchmaker = do
     chan <- newEmptyMVar
     rng <- newIORef =<< newTFGen
-    tid <- forkIO $ withThreadSet (loop Seq.empty chan rng)
+    tid <- forkIO $
+        withLobby $ \lobby ->
+            withThreadSet $ \ts ->
+                loop chan rng lobby ts
     return (putMVar chan, tid)
   where
-    loop lobby chan rng ts
-        | Seq.length lobby >= 10 = do
-            (white, lobby') <- atomicModifyIORef' rng (choose lobby)
-            (black, lobby'') <- atomicModifyIORef' rng (choose lobby')
-            _ <- fork ts $ do
-                -- TODO: Do something with the results
-                _ <- play numberOfMoves white black `finally`
-                    (playerClose white >> playerClose black)
+    loop chan rng lobby ts = do
+        seed <- readIORef rng
+        players <- readIORef lobby
+        -- TODO: Find a better matchmaking algorithm
+        if Seq.length players >= 2
+            then do
+                let (seed', (white, players')) = choose players seed
+                    (seed'', (black, players'')) = choose players' seed'
+                writeIORef rng seed''
+                writeIORef lobby players''
+                _ <- fork ts $ do
+                    -- TODO: Do something with the results
+                    moves <- play numberOfMoves white black `finally`
+                        (playerClose white >> playerClose black)
+                    print moves
+                    return ()
                 return ()
-            loop lobby'' chan rng ts
-        | otherwise = do
-            newPlayer <- takeMVar chan
-            loop (newPlayer Seq.<| lobby) chan rng ts
+            else do
+                newPlayer <- takeMVar chan
+                modifyIORef' lobby (newPlayer Seq.<|)
+        loop chan rng lobby ts
+
+    withLobby :: (IORef (Seq PlayerState) -> IO a) -> IO a
+    withLobby = bracket
+        (newIORef Seq.empty)
+        (\lobby -> readIORef lobby >>= mapM_ playerClose)
 
 
 login :: (PlayerState -> IO ()) -> Session ()
