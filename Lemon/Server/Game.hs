@@ -39,8 +39,8 @@ loop :: Word32 -> Game [(Move, Move)]
 loop totalMoves = replicateM (fromIntegral totalMoves) $ do
     whiteMove <- receiveMove White
     blackMove <- receiveMove Black
-    White .: send blackMove
-    Black .: send whiteMove
+    White .: send (Move Black blackMove)
+    Black .: send (Move White whiteMove)
     return (whiteMove, blackMove)
   where
     receiveMove player = player .: receive >>= \m -> case m of
