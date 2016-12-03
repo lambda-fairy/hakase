@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module SimpleClient where
+module RockStar where
 
 import Hakase.Client
 
