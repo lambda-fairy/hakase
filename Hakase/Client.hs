@@ -95,14 +95,14 @@ hakaseM init next name host port = connect host port $ \h -> do
             return result
     results <- evalStateT loop Nothing
     liftIO . Text.putStrLn $
-        textShow (length $ filter (== GT) results) <> " wins, "
-        <> textShow (length $ filter (== LT) results) <> " losses, "
+        textShow (length $ filter (== LT) results) <> " wins, "
+        <> textShow (length $ filter (== GT) results) <> " losses, "
         <> textShow (length $ filter (== EQ) results) <> " draws"
   where
     showResult r = case r of
-        LT -> "LOSE"
+        LT -> "WIN"
         EQ -> "DRAW"
-        GT -> "WIN"
+        GT -> "LOSS"
 
 
 -- | Represents a connection to the Hakase server.
