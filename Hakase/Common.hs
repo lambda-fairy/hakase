@@ -1,22 +1,45 @@
-{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DeriveGeneric, OverloadedStrings #-}
 
-module Hakase.Common where
+module Hakase.Common
+    ( -- * Core types
+      protocolVersion
+    , Command(..)
+    , Move(..)
+    , winner
 
-import Data.Aeson
-import Data.Aeson.Types
-import Data.Char
+      -- * Serialization
+    , parseCommand
+    , Parser
+    , renderCommand
+
+      -- * Miscellany
+    , textShow
+    ) where
+
+import Data.Attoparsec.ByteString.Char8 (Parser)
+import Data.ByteString (ByteString)
+import Data.Monoid ((<>))
 import Data.Text (Text)
 import qualified Data.Text as Text
-import GHC.Generics
+import Data.Word (Word32)
+import GHC.Generics (Generic)
+
+import Hakase.Parse
+import Hakase.Render
+
+
+-- | The current wire protocol version.
+protocolVersion :: Word32
+protocolVersion = 0
 
 
 -- | Represents a message in the Hakase protocol.
 data Command
-    = Hello { hello_clientName :: !Text, hello_clientVersion :: !Int }
+    = Hello { hello_clientName :: !Text, hello_clientVersion :: !Word32 }
         -- ^ Selamat siang. The first message sent by the client.
     | Welcome { welcome_serverName :: !Text }
         -- ^ Selamat datang. The first message sent by the server.
-    | Start { start_opponentName :: !Text, start_numberOfMoves :: !Int }
+    | Start { start_opponentName :: !Text, start_numberOfMoves :: !Word32 }
         -- ^ Starts a new round. This is sent from the server to the client.
     | Move { move_move :: !Move }
         -- ^ Represents a move in the game.
@@ -32,32 +55,16 @@ data Command
         -- (human-readable) message describing the error.
     deriving (Eq, Show, Generic)
 
-instance FromJSON Command where
-    parseJSON = genericParseJSON aesonOptions
-
-instance ToJSON Command where
-    toJSON = genericToJSON aesonOptions
-    toEncoding = genericToEncoding aesonOptions
+instance Parse Command
+instance Render Command
 
 
 -- | Represents a move in the great game of Rock Paper Scissors.
 data Move = Rock | Paper | Scissors
     deriving (Eq, Enum, Show, Generic)
 
-instance FromJSON Move where
-    parseJSON = genericParseJSON aesonOptions { allNullaryToStringTag = True }
-
-instance ToJSON Move where
-    toJSON = genericToJSON aesonOptions { allNullaryToStringTag = True }
-    toEncoding = genericToEncoding aesonOptions { allNullaryToStringTag = True }
-
-
-aesonOptions :: Options
-aesonOptions = defaultOptions
-    { fieldLabelModifier = camelTo2 '_' . tail . dropWhile (/= '_')
-    , constructorTagModifier = map toUpper
-    , allNullaryToStringTag = False
-    }
+instance Parse Move
+instance Render Move
 
 
 -- | Given the moves of two opposing players, decide who wins the round.
@@ -67,6 +74,14 @@ aesonOptions = defaultOptions
 winner :: Move -> Move -> Ordering
 winner a b = [EQ, LT, GT] !! mod (fromEnum a - fromEnum b) 3
     -- e.g. Rock loses against Paper, but wins against Scissors
+
+
+parseCommand :: Parser Command
+parseCommand = parse <* "\r\n"
+
+
+renderCommand :: Command -> ByteString
+renderCommand c = render c <> "\r\n"
 
 
 textShow :: Show a => a -> Text

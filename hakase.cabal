@@ -21,9 +21,11 @@ library
         Hakase.Common
         Hakase.Server
     other-modules:
+        Hakase.Parse
+        Hakase.Render
     build-depends:
         base >= 4.9 && < 5,
-        aeson,
+        attoparsec,
         bytestring,
         containers,
         exceptions,

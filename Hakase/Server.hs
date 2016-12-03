@@ -2,17 +2,28 @@
 
 module Hakase.Server where
 
+import Control.Applicative
 import Control.Concurrent
 import Control.Exception
 import Control.Monad
-import Data.Aeson
+import Data.Attoparsec.Combinator (endOfInput)
 import Data.Foldable
 import Data.Monoid
 import Data.Text (Text)
+import qualified Data.Text as Text
+import Data.Version (showVersion)
+import Data.Word (Word32)
 import Network.Simple.TCP hiding (recv, send)
 import qualified System.IO.Streams as Streams
+import qualified System.IO.Streams.Attoparsec as Streams
 
 import Hakase.Common
+
+import qualified Paths_hakase
+
+
+serverVersion :: Text
+serverVersion = Text.pack $ "Hakase/" ++ showVersion Paths_hakase.version
 
 
 hakaseServer :: HostPreference -> ServiceName -> IO r
@@ -27,10 +38,10 @@ handshake :: Chan (Client Ready, MVar Invite) -> (Socket, SockAddr) -> IO ()
 handshake lobbyChan (sock, addr) = do
     putStrLn $ "client connected: " ++ show addr
     (is, os) <- Streams.socketToStreams sock
-    is' <- Streams.lines is
+    is' <- Streams.parserToInputStream parseCommand' is
     let client = Client
-            { maybeRecv = (decodeStrict =<<) <$> Streams.read is'
-            , send = \c -> Streams.writeLazyByteString (encode c <> "\n") os
+            { maybeRecv = Streams.read is'
+            , send = \c -> Streams.write (Just $ renderCommand c) os
             , clientMoves = Handshaking
             , clientName = Handshaking
             }
@@ -44,6 +55,8 @@ handshake lobbyChan (sock, addr) = do
     loop invite client'
         -- Make sure that the channel is closed afterward
         `finally` writeChan (ready $ clientMoves client') Nothing
+  where
+    parseCommand' = Nothing <$ endOfInput <|> Just <$> parseCommand
 
 
 matchmaker :: Chan (Client Ready, MVar Invite) -> IO a
@@ -104,8 +117,8 @@ kick client reason = do
 handshake' :: Client Handshaking -> IO (Client Ready)
 handshake' client =
     recv client >>= \c -> case c of
-        Hello name version | version == 0 -> do
-            send client $ Welcome "Hakase!!!"
+        Hello name version | version == protocolVersion -> do
+            send client $ Welcome serverVersion
             moves <- newChan
             return client
                 { clientName = Ready name
@@ -118,7 +131,7 @@ handshake' client =
 
 
 data Invite = Invite
-    { numberOfMoves :: !Int
+    { numberOfMoves :: !Word32
     , opponentMoves :: !(Chan (Maybe Move))
     , opponentName :: !Text
     }
