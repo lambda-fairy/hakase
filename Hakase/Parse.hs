@@ -3,14 +3,14 @@
 module Hakase.Parse where
 
 
-import Control.Applicative
+import Control.Applicative ((<|>), empty)
 import Data.Attoparsec.ByteString (Parser)
 import qualified Data.Attoparsec.ByteString.Char8 as P
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as BC
 import Data.Text (Text)
 import qualified Data.Text.Encoding as Text
-import Data.Word
+import Data.Word (Word32)
 import GHC.Generics
 import Text.Printf (printf)
 import Text.Read (readMaybe)
@@ -57,8 +57,8 @@ instance forall c f. (GParse f, Constructor c) => GParse (C1 c f) where
         conString = BC.pack $ printf "%02d" (length name) ++ name
         name = conName (undefined :: C1 c f ())
 
-instance GParse f => GParse (M1 D c f) where
+instance GParse f => GParse (D1 c f) where
     gparse = M1 <$> gparse
 
-instance GParse f => GParse (M1 S c f) where
+instance GParse f => GParse (S1 c f) where
     gparse = M1 <$> gparse

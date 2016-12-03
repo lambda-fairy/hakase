@@ -55,8 +55,8 @@ instance forall c f. (GRender f, Constructor c) => GRender (C1 c f) where
       where
         name = BC.pack $ conName (undefined :: C1 c f ())
 
-instance GRender f => GRender (M1 D c f) where
+instance GRender f => GRender (D1 c f) where
     grender (M1 f) = grender f
 
-instance GRender f => GRender (M1 S c f) where
+instance GRender f => GRender (S1 c f) where
     grender (M1 f) = grender f
