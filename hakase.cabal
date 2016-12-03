@@ -17,6 +17,7 @@ extra-source-files: README.md
 
 library
     exposed-modules:
+        Hakase.Client
         Hakase.Common
         Hakase.Server
     other-modules:
