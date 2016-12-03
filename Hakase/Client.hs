@@ -20,6 +20,7 @@ import Control.Monad.Trans.State.Strict (evalStateT, get, put)
 import Data.Attoparsec.Combinator (endOfInput)
 import Data.Monoid ((<>))
 import Data.Text (Text)
+import qualified Data.Text as Text
 import qualified Data.Text.IO as Text
 import Data.Traversable (for)
 import Network.Simple.TCP (HostName, ServiceName)
@@ -90,8 +91,10 @@ hakaseM init next name host port = connect host port $ \h -> do
             put $ Just (oppMove, s')
             -- Determine the winner of this round
             let result = winner nextMove oppMove
-            liftIO . Text.putStrLn $ textShow nextMove <> " × "
-                <> textShow oppMove <> "  →  " <> showResult result
+            liftIO . Text.putStrLn $ " "
+                <> Text.justifyRight 8 ' ' (textShow nextMove) <> " × "
+                <> Text.justifyLeft 8 ' ' (textShow oppMove) <> "  →  "
+                <> showResult result
             return result
     results <- evalStateT loop Nothing
     liftIO . Text.putStrLn $
