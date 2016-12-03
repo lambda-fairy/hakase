@@ -3,6 +3,8 @@
 module Hakase.Common where
 
 import Data.Aeson
+import Data.Aeson.Types
+import Data.Char
 import Data.Text (Text)
 import qualified Data.Text as Text
 import GHC.Generics
@@ -10,20 +12,13 @@ import GHC.Generics
 
 -- | Represents a message in the Hakase protocol.
 data Command
-    = Hello !Text !Int
+    = Hello { hello_clientName :: !Text, hello_clientVersion :: !Int }
         -- ^ Selamat siang. The first message sent by the client.
-        --
-        -- The two arguments are the client's name and version, respectively.
-    | Welcome !Text
+    | Welcome { welcome_serverName :: !Text }
         -- ^ Selamat datang. The first message sent by the server.
-        --
-        -- The argument is the server name.
-    | Start !Text !Int
+    | Start { start_opponentName :: !Text, start_numberOfRounds :: !Int }
         -- ^ Starts a new round. This is sent from the server to the client.
-        --
-        -- The two arguments are the opponent's name and number of rounds,
-        -- respectively.
-    | Move !Move
+    | Move { move_move :: !Move }
         -- ^ Represents a move in the game.
         --
         -- If sent from the client to the server, this contains the client's
@@ -31,26 +26,39 @@ data Command
         --
         -- If sent from the server to the client, this contains the opponent's
         -- latest move.
-    | Kick !Text
+    | Kick { kick_reason :: !Text }
         -- ^ Fatal error. This is sent from the server to the client, right
         -- before the server cuts the connection. The argument is a
         -- (human-readable) message describing the error.
     deriving (Eq, Show, Generic)
 
-instance FromJSON Command
+instance FromJSON Command where
+    parseJSON = genericParseJSON aesonOptions
 
 instance ToJSON Command where
-    toEncoding = genericToEncoding defaultOptions
+    toJSON = genericToJSON aesonOptions
+    toEncoding = genericToEncoding aesonOptions
 
 
 -- | Represents a move in the great game of Rock Paper Scissors.
 data Move = Rock | Paper | Scissors
     deriving (Eq, Enum, Show, Generic)
 
-instance FromJSON Move
+instance FromJSON Move where
+    parseJSON = genericParseJSON aesonOptions { allNullaryToStringTag = True }
 
 instance ToJSON Move where
-    toEncoding = genericToEncoding defaultOptions
+    toJSON = genericToJSON aesonOptions { allNullaryToStringTag = True }
+    toEncoding = genericToEncoding defaultOptions { allNullaryToStringTag = True }
+
+
+aesonOptions :: Options
+aesonOptions = defaultOptions
+    { fieldLabelModifier = camelTo2 '_' . tail . dropWhile (/= '_')
+    , constructorTagModifier = map toUpper
+    , allNullaryToStringTag = False
+    }
+
 
 -- | Given the moves of two opposing players, decide who wins the round.
 --
