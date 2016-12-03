@@ -9,7 +9,6 @@ import Data.Aeson
 import Data.Foldable
 import Data.Monoid
 import Data.Text (Text)
-import Data.Traversable
 import Network.Simple.TCP hiding (recv, send)
 import qualified System.IO.Streams as Streams
 
@@ -18,52 +17,67 @@ import Hakase.Common
 
 hakaseServer :: HostPreference -> ServiceName -> IO r
 hakaseServer hp port = do
-    clientChan <- newChan
-    bracket (forkIO $ matchmaker clientChan) killThread $ \_ ->
+    lobbyChan <- newChan
+    bracket (forkIO $ matchmaker lobbyChan) killThread $ \_ ->
         listen hp port $ \(lsock, _) ->
-            forever $ acceptFork lsock (handshake clientChan)
+            forever $ acceptFork lsock (handshake lobbyChan)
 
 
-handshake :: Chan (Client HasName) -> (Socket, SockAddr) -> IO ()
-handshake clientChan (sock, addr) = do
+handshake :: Chan (Client Ready, MVar Invite) -> (Socket, SockAddr) -> IO ()
+handshake lobbyChan (sock, addr) = do
     putStrLn $ "client connected: " ++ show addr
-    closeVar <- newEmptyMVar
     (is, os) <- Streams.socketToStreams sock
     is' <- Streams.lines is
     let client = Client
-            { maybeRecv = do
-                maybeLine <- Streams.read is'
-                for maybeLine $ \line ->
-                    case decodeStrict line of
-                        Just c -> return c
-                        Nothing -> kick client "could not parse command"
-            , send = \c -> Streams.writeLazyByteString (encode c) os
-            , close = void $ tryPutMVar closeVar ()
-            , nameF = NoName
+            { maybeRecv = (decodeStrict =<<) <$> Streams.read is'
+            , send = \c -> Streams.writeLazyByteString (encode c <> "\n") os
+            , clientMoves = Handshaking
+            , clientName = Handshaking
             }
+    -- Perform the handshake
     client' <- handshake' client
-    writeChan clientChan client'
-    takeMVar closeVar
+    -- Wait for a challenger to appear
+    inviteVar <- newEmptyMVar
+    writeChan lobbyChan (client', inviteVar)
+    invite <- takeMVar inviteVar
+    -- Play the game!
+    loop invite client'
+        -- Make sure that the channel is closed afterward
+        `finally` writeChan (ready $ clientMoves client') Nothing
 
 
-matchmaker :: Chan (Client HasName) -> IO a
-matchmaker = error "unimplemented"
+matchmaker :: Chan (Client Ready, MVar Invite) -> IO a
+matchmaker lobbyChan = forever $ do
+    (whiteClient, whiteVar) <- readChan lobbyChan
+    (blackClient, blackVar) <- readChan lobbyChan
+    putMVar whiteVar Invite
+        { numberOfMoves = defaultNumberOfMoves
+        , opponentMoves = ready $ clientMoves blackClient
+        , opponentName = ready $ clientName blackClient
+        }
+    putMVar blackVar Invite
+        { numberOfMoves = defaultNumberOfMoves
+        , opponentMoves = ready $ clientMoves whiteClient
+        , opponentName = ready $ clientName whiteClient
+        }
+  where
+    defaultNumberOfMoves = 10  -- lol
 
 
-data Client f = Client
-    { maybeRecv :: IO (Maybe Command)
-    , send :: Command -> IO ()
-    , close :: IO ()
-    , nameF :: f Text
+data Client state = Client
+    { maybeRecv :: !(IO (Maybe Command))
+    , send :: !(Command -> IO ())
+    , clientName :: !(state Text)
+    , clientMoves :: !(state (Chan (Maybe Move)))
     }
 
-newtype HasName a = HasName a
+data Handshaking a = Handshaking
     deriving Foldable
 
-data NoName a = NoName
+newtype Ready a = Ready { ready :: a }
     deriving Foldable
 
-recv :: Foldable f => Client f -> IO Command
+recv :: Foldable state => Client state -> IO Command
 recv client = do
     m <- maybeRecv client
     case m of
@@ -71,41 +85,55 @@ recv client = do
         Nothing -> kick client "connection lost"
 
 
-data ClientKicked = ClientKicked { clientKickedName :: !(Maybe Text) }
+data ClientKicked = ClientKicked
+    { clientKickedName :: !(Maybe Text)
+    , clientKickedReason :: !Text
+    }
     deriving Show
 
 instance Exception ClientKicked
 
-kick :: Foldable f => Client f -> Text -> IO a
+kick :: Foldable state => Client state -> Text -> IO a
 kick client reason = do
     send client $ Kick reason
-    close client
-    throw $ ClientKicked (toMaybe $ nameF client)
+    throw $ ClientKicked (toMaybe $ clientName client) reason
   where
     toMaybe = getFirst . foldMap (First . Just)
 
 
-handshake' :: Client NoName -> IO (Client HasName)
+handshake' :: Client Handshaking -> IO (Client Ready)
 handshake' client =
     recv client >>= \c -> case c of
         Hello name version | version == 0 -> do
             send client $ Welcome "Hakase!!!"
-            return client { nameF = HasName name }
+            moves <- newChan
+            return client
+                { clientName = Ready name
+                , clientMoves = Ready moves
+                }
         Hello _ version ->
             kick client $ "unsupported client version: " <> textShow version
         _ ->
             kick client $ "unexpected command: " <> textShow c
 
 
-loop :: [(MVar Move, MVar Move)] -> Text -> Client HasName -> IO ()
-loop moves otherName client = do
+data Invite = Invite
+    { numberOfMoves :: !Int
+    , opponentMoves :: !(Chan (Maybe Move))
+    , opponentName :: !Text
+    }
+
+loop :: Invite -> Client Ready -> IO ()
+loop invite client = do
     -- Start the game
-    send client $ Start otherName (length moves)
-    for_ moves $ \(myMoveRef, otherMoveRef) -> do
+    send client $ Start (opponentName invite) (numberOfMoves invite)
+    for_ [1 .. numberOfMoves invite] $ \_ -> do
         -- Receive this player's next move
         recv client >>= \c -> case c of
-            Move myMove -> putMVar myMoveRef myMove  -- OK!
+            Move move -> writeChan (ready $ clientMoves client) $ Just move
             _ -> kick client $ "unexpected command: " <> textShow c
         -- Send them their opponent's latest move
-        otherMove <- readMVar otherMoveRef
-        send client $ Move otherMove
+        opponentMove <- readChan (opponentMoves invite)
+        case opponentMove of
+            Just move -> send client $ Move move
+            Nothing -> kick client "opponent disconnected :("

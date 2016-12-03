@@ -16,7 +16,7 @@ data Command
         -- ^ Selamat siang. The first message sent by the client.
     | Welcome { welcome_serverName :: !Text }
         -- ^ Selamat datang. The first message sent by the server.
-    | Start { start_opponentName :: !Text, start_numberOfRounds :: !Int }
+    | Start { start_opponentName :: !Text, start_numberOfMoves :: !Int }
         -- ^ Starts a new round. This is sent from the server to the client.
     | Move { move_move :: !Move }
         -- ^ Represents a move in the game.
@@ -49,7 +49,7 @@ instance FromJSON Move where
 
 instance ToJSON Move where
     toJSON = genericToJSON aesonOptions { allNullaryToStringTag = True }
-    toEncoding = genericToEncoding defaultOptions { allNullaryToStringTag = True }
+    toEncoding = genericToEncoding aesonOptions { allNullaryToStringTag = True }
 
 
 aesonOptions :: Options
