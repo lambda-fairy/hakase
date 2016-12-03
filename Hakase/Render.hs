@@ -4,6 +4,7 @@ module Hakase.Render where
 
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as BC
+import Data.Char (toLower)
 import Data.Monoid ((<>), mempty)
 import Data.Text (Text)
 import qualified Data.Text.Encoding as Text
@@ -51,9 +52,9 @@ instance Render c => GRender (K1 i c) where
     grender (K1 c) = render c
 
 instance forall c f. (GRender f, Constructor c) => GRender (C1 c f) where
-    grender (M1 f) = render name <> grender f
+    grender (M1 f) = render (BC.pack name) <> grender f
       where
-        name = BC.pack $ conName (undefined :: C1 c f ())
+        name = map toLower $ conName (undefined :: C1 c f ())
 
 instance GRender f => GRender (D1 c f) where
     grender (M1 f) = grender f

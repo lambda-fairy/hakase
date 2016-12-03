@@ -8,6 +8,7 @@ import Data.Attoparsec.ByteString (Parser)
 import qualified Data.Attoparsec.ByteString.Char8 as P
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as BC
+import Data.Char (toLower)
 import Data.Text (Text)
 import qualified Data.Text.Encoding as Text
 import Data.Word (Word32)
@@ -55,7 +56,7 @@ instance forall c f. (GParse f, Constructor c) => GParse (C1 c f) where
     gparse = M1 <$ P.stringCI conString <*> gparse
       where
         conString = BC.pack $ printf "%02d" (length name) ++ name
-        name = conName (undefined :: C1 c f ())
+        name = map toLower $ conName (undefined :: C1 c f ())
 
 instance GParse f => GParse (D1 c f) where
     gparse = M1 <$> gparse
