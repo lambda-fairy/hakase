@@ -16,6 +16,7 @@ import Data.Word (Word32)
 import Network.Simple.TCP hiding (recv, send)
 import qualified System.IO.Streams as Streams
 import qualified System.IO.Streams.Attoparsec as Streams
+import System.Timeout (timeout)
 
 import Hakase.Common
 
@@ -92,10 +93,11 @@ newtype Ready a = Ready { ready :: a }
 
 recv :: Foldable state => Client state -> IO Command
 recv client = do
-    m <- maybeRecv client
+    m <- timeout (5 * 1000 * 1000) $ maybeRecv client  -- 5 seconds
     case m of
-        Just c -> return c
-        Nothing -> kick client "connection lost"
+        Just (Just c) -> return c
+        Just Nothing -> kick client "connection lost"
+        Nothing -> kick client "too slow"
 
 
 data ClientKicked = ClientKicked
