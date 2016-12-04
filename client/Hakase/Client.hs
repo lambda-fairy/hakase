@@ -11,7 +11,6 @@ module Hakase.Client
     , module Hakase.Common
     ) where
 
-import Control.Applicative ((<|>))
 import Control.Exception (throw)
 import Control.Monad.Catch (MonadMask)
 import Control.Monad.IO.Class (MonadIO(liftIO))
@@ -23,6 +22,7 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.IO as Text
 import Data.Traversable (for)
+import Options.Applicative
 import Network.Simple.TCP (HostName, ServiceName)
 import qualified Network.Simple.TCP as Network
 import Prelude hiding (init)
@@ -34,6 +34,8 @@ import Hakase.Common
 
 
 -- | Play a single game of Rock Paper Scissors.
+--
+-- The server host name and port are taken automatically from the command line.
 hakase
     :: (MonadIO m, MonadMask m)
     => (Text -> Int -> (Move, s))
@@ -42,10 +44,6 @@ hakase
         -- ^ Given the opponent's last move, compute the next move
     -> Text
         -- ^ Client name
-    -> HostName
-        -- ^ Server host name
-    -> ServiceName
-        -- ^ Server port
     -> m ()
 hakase init next =
     hakaseM
@@ -53,7 +51,7 @@ hakase init next =
         (\lastMove s -> return $ next lastMove s)
 
 
--- | Like 'hakase', but allows for monadic functions.
+-- | Like 'hakase', but allows for running the computations in a custom monad.
 hakaseM
     :: (MonadIO m, MonadMask m)
     => (Text -> Int -> m (Move, s))
@@ -62,12 +60,31 @@ hakaseM
         -- ^ Given the opponent's last move, compute the next move
     -> Text
         -- ^ Client name
-    -> HostName
-        -- ^ Server host name
-    -> ServiceName
-        -- ^ Server port
     -> m ()
-hakaseM init next name host port = connect host port $ \h -> do
+hakaseM init next name = liftIO (execParser opts) >>= hakaseM' init next name
+  where
+    opts = info (helper <*> args)
+        ( fullDesc
+        <> header (name' ++ " - an application that plays Rock-Paper-Scissors") )
+
+    args = (,)
+        <$> strArgument
+            ( metavar "HOST"
+            <> value "localhost"
+            <> help "Server host name" )
+        <*> strArgument
+            ( metavar "PORT"
+            <> value "6266"
+            <> help "Server port" )
+
+    name' = Text.unpack name
+
+
+hakaseM'
+    :: (MonadIO m, MonadMask m)
+    => (Text -> Int -> m (Move, s)) -> (Move -> s -> m (Move, s)) -> Text
+    -> (HostName, ServiceName) -> m ()
+hakaseM' init next name (host, port) = connect host port $ \h -> do
     (opponent, numMoves) <- liftIO $ do
         -- Perform the handshake
         send h $ Hello name protocolVersion

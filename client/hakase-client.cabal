@@ -26,6 +26,7 @@ library
         exceptions,
         hakase-common,
         io-streams,
+        optparse-applicative,
         network-simple,
         text,
         transformers
