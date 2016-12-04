@@ -29,8 +29,10 @@ main = do
         <$> argument auto
             ( metavar "HOST"
             <> value "localhost"
+            <> showDefault
             <> help "Host name to bind to" )
         <*> strArgument
             ( metavar "PORT"
             <> value "6266"
+            <> showDefault
             <> help "Port to bind to" )

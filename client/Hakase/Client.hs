@@ -71,10 +71,12 @@ hakaseM init next name = liftIO (execParser opts) >>= hakaseM' init next name
         <$> strArgument
             ( metavar "HOST"
             <> value "localhost"
+            <> showDefault
             <> help "Server host name" )
         <*> strArgument
             ( metavar "PORT"
             <> value "6266"
+            <> showDefault
             <> help "Server port" )
 
     name' = Text.unpack name
