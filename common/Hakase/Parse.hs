@@ -2,7 +2,6 @@
 
 module Hakase.Parse where
 
-
 import Control.Applicative ((<|>), empty)
 import Data.Attoparsec.ByteString (Parser)
 import qualified Data.Attoparsec.ByteString.Char8 as P

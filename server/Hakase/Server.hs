@@ -20,11 +20,11 @@ import System.Timeout (timeout)
 
 import Hakase.Common
 
-import qualified Paths_hakase
+import qualified Paths_hakase_server
 
 
 serverVersion :: Text
-serverVersion = Text.pack $ "Hakase/" ++ showVersion Paths_hakase.version
+serverVersion = Text.pack $ "Hakase/" ++ showVersion Paths_hakase_server.version
 
 
 hakaseServer :: HostPreference -> ServiceName -> IO r
