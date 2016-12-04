@@ -1,9 +1,10 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module OneUpper where
+-- | Takes the opponent's last move, and throws whatever beats that.
+--
+-- Super effective at constant strategies (like the RockStar).
 
 import Hakase.Client
-
 
 main :: IO ()
 main = hakase (\_ _ -> (Rock, ())) (\lastMove () -> (dominator lastMove, ()))
