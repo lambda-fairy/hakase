@@ -19,6 +19,7 @@ library
     exposed-modules:
         Hakase.Server
     other-modules:
+        Paths_hakase_server
     build-depends:
         base >= 4.9 && < 5,
         attoparsec,
@@ -27,9 +28,20 @@ library
         exceptions,
         hakase-common,
         io-streams,
-        network-simple,
+        network,
         text,
         tf-random
+    default-language: Haskell2010
+    ghc-options: -Wall
+
+executable hakase-server
+    hs-source-dirs: main
+    main-is: Main.hs
+    build-depends:
+        base,
+        hakase-server,
+        network-simple,
+        optparse-applicative
     default-language: Haskell2010
     ghc-options: -Wall
 

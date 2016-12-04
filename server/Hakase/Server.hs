@@ -1,19 +1,32 @@
 {-# LANGUAGE DeriveFoldable, OverloadedStrings #-}
 
-module Hakase.Server where
+module Hakase.Server
+    ( -- * Entry point
+      hakaseServer
+    , hakaseVersion
+      -- * Clients
+    , Client()
+    , Handshaking()
+    , Ready()
+    , clientFromSocket
+    , clientFromByteStreams
+    , clientFromCommandStreams
+    ) where
 
 import Control.Applicative
 import Control.Concurrent
 import Control.Exception
 import Control.Monad
 import Data.Attoparsec.Combinator (endOfInput)
+import Data.ByteString (ByteString)
 import Data.Foldable
 import Data.Monoid
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Data.Version (showVersion)
 import Data.Word (Word32)
-import Network.Simple.TCP hiding (recv, send)
+import Network.Socket (Socket)
+import System.IO.Streams (InputStream, OutputStream)
 import qualified System.IO.Streams as Streams
 import qualified System.IO.Streams.Attoparsec as Streams
 import System.Timeout (timeout)
@@ -23,29 +36,65 @@ import Hakase.Common
 import qualified Paths_hakase_server
 
 
-serverVersion :: Text
-serverVersion = Text.pack $ "Hakase/" ++ showVersion Paths_hakase_server.version
-
-
-hakaseServer :: HostPreference -> ServiceName -> IO r
-hakaseServer hp port = do
+-- | Run the Hakase server.
+--
+-- To allow for easier mocking, @hakaseServer@ doesn't listen to the network on
+-- its own. Instead, the user must accept connections themselves, referring any
+-- new clients to the given callback. A typical implementation may look like
+-- this:
+--
+-- @
+-- hakaseServer $ \\continue ->
+--     'forever' $ do
+--         -- Accept an incoming connection
+--         sock <- ...
+--         'forkIO' $ do
+--             -- Wrap the socket in a client object
+--             client <- 'clientFromSocket' sock
+--             -- Hand the client off to the main loop
+--             continue client
+-- @
+hakaseServer :: ((Client Handshaking -> IO ()) -> IO r) -> IO r
+hakaseServer k = do
     lobbyChan <- newChan
     bracket (forkIO $ matchmaker lobbyChan) killThread $ \_ ->
-        listen hp port $ \(lsock, _) ->
-            forever $ acceptFork lsock (handshake lobbyChan)
+        k (handshake lobbyChan)
 
 
-handshake :: Chan (Client Ready, MVar Invite) -> (Socket, SockAddr) -> IO ()
-handshake lobbyChan (sock, addr) = do
-    putStrLn $ "client connected: " ++ show addr
-    (is, os) <- Streams.socketToStreams sock
-    is' <- Streams.parserToInputStream parseCommand' is
-    let client = Client
-            { maybeRecv = Streams.read is'
-            , send = \c -> Streams.write (Just $ renderCommand c) os
-            , clientMoves = Handshaking
-            , clientName = Handshaking
-            }
+-- | The server version.
+hakaseVersion :: String
+hakaseVersion = "Hakase/" ++ showVersion Paths_hakase_server.version
+
+
+-- | Construct a 'Client' from a network 'Socket'.
+clientFromSocket :: Socket -> IO (Client Handshaking)
+clientFromSocket = clientFromByteStreams <=< Streams.socketToStreams
+
+-- | Construct a 'Client' from a pair of byte streams.
+clientFromByteStreams
+    :: (InputStream ByteString, OutputStream ByteString)
+    -> IO (Client Handshaking)
+clientFromByteStreams (is, os) =
+    curry clientFromCommandStreams
+        <$> Streams.parserToInputStream parseCommand' is
+        <*> Streams.contramap renderCommand os
+  where
+    parseCommand' = Nothing <$ endOfInput <|> Just <$> parseCommand
+
+-- | Construct a 'Client' from streams of parsed commands.
+clientFromCommandStreams
+    :: (InputStream Command, OutputStream Command)
+    -> Client Handshaking
+clientFromCommandStreams (is, os) = Client
+    { maybeRecv = Streams.read is
+    , send = \c -> Streams.write (Just c) os
+    , clientMoves = Handshaking
+    , clientName = Handshaking
+    }
+
+
+handshake :: Chan (Client Ready, MVar Invite) -> Client Handshaking -> IO ()
+handshake lobbyChan client = do
     -- Perform the handshake
     client' <- handshake' client
     -- Wait for a challenger to appear
@@ -56,8 +105,6 @@ handshake lobbyChan (sock, addr) = do
     loop invite client'
         -- Make sure that the channel is closed afterward
         `finally` writeChan (ready $ clientMoves client') Nothing
-  where
-    parseCommand' = Nothing <$ endOfInput <|> Just <$> parseCommand
 
 
 matchmaker :: Chan (Client Ready, MVar Invite) -> IO a
@@ -78,6 +125,10 @@ matchmaker lobbyChan = forever $ do
     defaultNumberOfMoves = 10  -- lol
 
 
+-- | Stores information relating to a particular client.
+--
+-- The @state@ parameter represents how much we know about the client. It can be
+-- either 'Handshaking' or 'Ready'.
 data Client state = Client
     { maybeRecv :: !(IO (Maybe Command))
     , send :: !(Command -> IO ())
@@ -85,9 +136,11 @@ data Client state = Client
     , clientMoves :: !(state (Chan (Maybe Move)))
     }
 
+-- | The client is still handshaking. There are still things we don't know.
 data Handshaking a = Handshaking
     deriving Foldable
 
+-- | The client is ready for action. All information is laid bare.
 newtype Ready a = Ready { ready :: a }
     deriving Foldable
 
@@ -101,8 +154,8 @@ recv client = do
 
 
 data ClientKicked = ClientKicked
-    { clientKickedName :: !(Maybe Text)
-    , clientKickedReason :: !Text
+    { _clientKickedName :: !(Maybe Text)
+    , _clientKickedReason :: !Text
     }
     deriving Show
 
@@ -120,7 +173,7 @@ handshake' :: Client Handshaking -> IO (Client Ready)
 handshake' client =
     recv client >>= \c -> case c of
         Hello name version | version == protocolVersion -> do
-            send client $ Welcome serverVersion
+            send client $ Welcome (Text.pack hakaseVersion)
             moves <- newChan
             return client
                 { clientName = Ready name
