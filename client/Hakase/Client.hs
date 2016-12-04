@@ -33,6 +33,7 @@ import qualified System.IO.Streams.Attoparsec as Streams
 import Hakase.Common
 
 
+-- | Play a single game of Rock Paper Scissors.
 hakase
     :: (MonadIO m, MonadMask m)
     => (Text -> Int -> (Move, s))
@@ -52,6 +53,7 @@ hakase init next =
         (\lastMove s -> return $ next lastMove s)
 
 
+-- | Like 'hakase', but allows for monadic functions.
 hakaseM
     :: (MonadIO m, MonadMask m)
     => (Text -> Int -> m (Move, s))

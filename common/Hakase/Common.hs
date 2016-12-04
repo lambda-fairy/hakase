@@ -9,7 +9,6 @@ module Hakase.Common
 
       -- * Serialization
     , parseCommand
-    , Parser
     , renderCommand
 
       -- * Miscellany
@@ -76,13 +75,20 @@ winner a b = [EQ, LT, GT] !! mod (fromEnum a - fromEnum b) 3
     -- e.g. Rock loses against Paper, but wins against Scissors
 
 
+-- | Parse a single 'Command', including its trailing CRLF.
+--
+-- This is an inverse of 'renderCommand'.
 parseCommand :: Parser Command
 parseCommand = parse <* "\r\n"
 
 
+-- | Render a 'Command' to a 'ByteString', appending a trailing CRLF.
+--
+-- This is an inverse of 'parseCommand'.
 renderCommand :: Command -> ByteString
 renderCommand c = render c <> "\r\n"
 
 
+-- | Like 'show', but converts to a 'Text' instead of a 'String'.
 textShow :: Show a => a -> Text
 textShow = Text.pack . show

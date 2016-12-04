@@ -58,7 +58,7 @@ hakaseServer :: ((Client Handshaking -> IO ()) -> IO r) -> IO r
 hakaseServer k = do
     lobbyChan <- newChan
     bracket (forkIO $ matchmaker lobbyChan) killThread $ \_ ->
-        k (handshake lobbyChan)
+        k (accept lobbyChan)
 
 
 -- | The server version.
@@ -93,10 +93,10 @@ clientFromCommandStreams (is, os) = Client
     }
 
 
-handshake :: Chan (Client Ready, MVar Invite) -> Client Handshaking -> IO ()
-handshake lobbyChan client = do
+accept :: Chan (Client Ready, MVar Invite) -> Client Handshaking -> IO ()
+accept lobbyChan client = do
     -- Perform the handshake
-    client' <- handshake' client
+    client' <- handshake client
     -- Wait for a challenger to appear
     inviteVar <- newEmptyMVar
     writeChan lobbyChan (client', inviteVar)
@@ -169,8 +169,8 @@ kick client reason = do
     toMaybe = getFirst . foldMap (First . Just)
 
 
-handshake' :: Client Handshaking -> IO (Client Ready)
-handshake' client =
+handshake :: Client Handshaking -> IO (Client Ready)
+handshake client =
     recv client >>= \c -> case c of
         Hello name version | version == protocolVersion -> do
             send client $ Welcome (Text.pack hakaseVersion)
