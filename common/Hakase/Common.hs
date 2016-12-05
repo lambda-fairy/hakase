@@ -3,13 +3,13 @@
 module Hakase.Common
     ( -- * Core types
       protocolVersion
-    , Command(..)
+    , Message(..)
     , Move(..)
     , winner
 
       -- * Serialization
-    , parseCommand
-    , renderCommand
+    , parseMessage
+    , renderMessage
 
       -- * Miscellany
     , textShow
@@ -33,7 +33,7 @@ protocolVersion = 0
 
 
 -- | Represents a message in the Hakase protocol.
-data Command
+data Message
     = Hello { hello_clientName :: !Text, hello_clientVersion :: !Word32 }
         -- ^ Selamat siang. The first message sent by the client.
     | Welcome { welcome_serverName :: !Text }
@@ -54,8 +54,8 @@ data Command
         -- (human-readable) message describing the error.
     deriving (Eq, Show, Generic)
 
-instance Parse Command
-instance Render Command
+instance Parse Message
+instance Render Message
 
 
 -- | Represents a move in the great game of Rock Paper Scissors.
@@ -75,18 +75,18 @@ winner a b = [EQ, LT, GT] !! mod (fromEnum a - fromEnum b) 3
     -- e.g. Rock loses against Paper, but wins against Scissors
 
 
--- | Parse a single 'Command', including its trailing CRLF.
+-- | Parse a single 'Message', including its trailing CRLF.
 --
--- This is an inverse of 'renderCommand'.
-parseCommand :: Parser Command
-parseCommand = parse <* "\r\n"
+-- This is an inverse of 'renderMessage'.
+parseMessage :: Parser Message
+parseMessage = parse <* "\r\n"
 
 
--- | Render a 'Command' to a 'ByteString', appending a trailing CRLF.
+-- | Render a 'Message' to a 'ByteString', appending a trailing CRLF.
 --
--- This is an inverse of 'parseCommand'.
-renderCommand :: Command -> ByteString
-renderCommand c = render c <> "\r\n"
+-- This is an inverse of 'parseMessage'.
+renderMessage :: Message -> ByteString
+renderMessage c = render c <> "\r\n"
 
 
 -- | Like 'show', but converts to a 'Text' instead of a 'String'.

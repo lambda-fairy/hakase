@@ -131,11 +131,11 @@ hakaseM' init next name (host, port) = connect host port $ \h -> do
 
 -- | Represents a connection to the Hakase server.
 data Hakase = Hakase
-    { recv :: IO Command
+    { recv :: IO Message
         -- ^ Wait for a message from the server.
         --
         -- Throws an exception if the underlying socket has been closed.
-    , send :: Command -> IO ()
+    , send :: Message -> IO ()
         -- ^ Send a message to the server.
     }
 
@@ -150,11 +150,11 @@ connect
     -> (Hakase -> m r) -> m r
 connect host port k = Network.connect host port $ \(sock, _) -> do
     (is, os) <- liftIO $ Streams.socketToStreams sock
-    is' <- liftIO $ Streams.parserToInputStream parseCommand' is
+    is' <- liftIO $ Streams.parserToInputStream parseMessage' is
     k Hakase
         { recv = Streams.read is' >>= maybe (throw eofError) return
-        , send = \c -> Streams.write (Just $ renderCommand c) os
+        , send = \message -> Streams.write (Just $ renderMessage message) os
         }
   where
-    parseCommand' = Nothing <$ endOfInput <|> Just <$> parseCommand
+    parseMessage' = Nothing <$ endOfInput <|> Just <$> parseMessage
     eofError = mkIOError eofErrorType "end of stream" Nothing Nothing

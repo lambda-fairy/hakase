@@ -10,7 +10,7 @@ module Hakase.Server
     , Ready()
     , clientFromSocket
     , clientFromByteStreams
-    , clientFromCommandStreams
+    , clientFromMessageStreams
     ) where
 
 import Control.Applicative
@@ -75,19 +75,19 @@ clientFromByteStreams
     :: (InputStream ByteString, OutputStream ByteString)
     -> IO (Client Handshaking)
 clientFromByteStreams (is, os) =
-    curry clientFromCommandStreams
-        <$> Streams.parserToInputStream parseCommand' is
-        <*> Streams.contramap renderCommand os
+    curry clientFromMessageStreams
+        <$> Streams.parserToInputStream parseMessage' is
+        <*> Streams.contramap renderMessage os
   where
-    parseCommand' = Nothing <$ endOfInput <|> Just <$> parseCommand
+    parseMessage' = Nothing <$ endOfInput <|> Just <$> parseMessage
 
--- | Construct a 'Client' from streams of parsed commands.
-clientFromCommandStreams
-    :: (InputStream Command, OutputStream Command)
+-- | Construct a 'Client' from streams of parsed messages.
+clientFromMessageStreams
+    :: (InputStream Message, OutputStream Message)
     -> Client Handshaking
-clientFromCommandStreams (is, os) = Client
+clientFromMessageStreams (is, os) = Client
     { maybeRecv = Streams.read is
-    , send = \c -> Streams.write (Just c) os
+    , send = \message -> Streams.write (Just message) os
     , clientMoves = Handshaking
     , clientName = Handshaking
     }
@@ -130,8 +130,8 @@ matchmaker lobbyChan = forever $ do
 -- The @state@ parameter represents how much we know about the client. It can be
 -- either 'Handshaking' or 'Ready'.
 data Client state = Client
-    { maybeRecv :: !(IO (Maybe Command))
-    , send :: !(Command -> IO ())
+    { maybeRecv :: !(IO (Maybe Message))
+    , send :: !(Message -> IO ())
     , clientName :: !(state Text)
     , clientMoves :: !(state (Chan (Maybe Move)))
     }
@@ -144,11 +144,11 @@ data Handshaking a = Handshaking
 newtype Ready a = Ready { ready :: a }
     deriving Foldable
 
-recv :: Foldable state => Client state -> IO Command
+recv :: Foldable state => Client state -> IO Message
 recv client = do
     m <- timeout (5 * 1000 * 1000) $ maybeRecv client  -- 5 seconds
     case m of
-        Just (Just c) -> return c
+        Just (Just message) -> return message
         Just Nothing -> kick client "connection lost"
         Nothing -> kick client "too slow"
 
@@ -171,7 +171,7 @@ kick client reason = do
 
 handshake :: Client Handshaking -> IO (Client Ready)
 handshake client =
-    recv client >>= \c -> case c of
+    recv client >>= \message -> case message of
         Hello name version | version == protocolVersion -> do
             send client $ Welcome (Text.pack hakaseVersion)
             moves <- newChan
@@ -182,7 +182,7 @@ handshake client =
         Hello _ version ->
             kick client $ "unsupported client version: " <> textShow version
         _ ->
-            kick client $ "unexpected command: " <> textShow c
+            kick client $ "unexpected message: " <> textShow message
 
 
 data Invite = Invite
@@ -197,9 +197,9 @@ loop invite client = do
     send client $ Start (opponentName invite) (numberOfMoves invite)
     for_ [1 .. numberOfMoves invite] $ \_ -> do
         -- Receive this player's next move
-        recv client >>= \c -> case c of
+        recv client >>= \message -> case message of
             Move move -> writeChan (ready $ clientMoves client) $ Just move
-            _ -> kick client $ "unexpected command: " <> textShow c
+            _ -> kick client $ "unexpected message: " <> textShow message
         -- Send them their opponent's latest move
         opponentMove <- readChan (opponentMoves invite)
         case opponentMove of
