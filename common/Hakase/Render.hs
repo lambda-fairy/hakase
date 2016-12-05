@@ -1,4 +1,4 @@
-{-# LANGUAGE DefaultSignatures, FlexibleContexts, FlexibleInstances, OverloadedStrings, ScopedTypeVariables, TypeOperators #-}
+{-# LANGUAGE DefaultSignatures, FlexibleContexts, FlexibleInstances, ScopedTypeVariables, TypeOperators #-}
 
 module Hakase.Render where
 
