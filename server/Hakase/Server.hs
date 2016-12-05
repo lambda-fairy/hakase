@@ -4,13 +4,10 @@ module Hakase.Server
     ( -- * Entry point
       hakaseServer
     , hakaseVersion
-      -- * Clients
-    , Client()
-    , Handshaking()
-    , Ready()
-    , clientFromSocket
-    , clientFromByteStreams
-    , clientFromMessageStreams
+    , socketToHakaseStreams
+    , makeHakaseStreams
+      -- * Re-exports
+    , module Hakase.Common
     ) where
 
 import Control.Applicative
@@ -49,12 +46,14 @@ import qualified Paths_hakase_server
 --         -- Accept an incoming connection
 --         sock <- ...
 --         'forkIO' $ do
---             -- Wrap the socket in a client object
---             client <- 'clientFromSocket' sock
+--             -- Wrap the socket in a pair of message streams
+--             st <- 'socketToHakaseStreams' sock
 --             -- Hand the client off to the main loop
---             continue client
+--             continue st
 -- @
-hakaseServer :: ((Client Handshaking -> IO ()) -> IO r) -> IO r
+hakaseServer
+    :: (((InputStream Message, OutputStream Message) -> IO ()) -> IO r)
+    -> IO r
 hakaseServer k = do
     lobbyChan <- newChan
     bracket (forkIO $ matchmaker lobbyChan) killThread $ \_ ->
@@ -66,35 +65,35 @@ hakaseVersion :: String
 hakaseVersion = "Hakase/" ++ showVersion Paths_hakase_server.version
 
 
--- | Construct a 'Client' from a network 'Socket'.
-clientFromSocket :: Socket -> IO (Client Handshaking)
-clientFromSocket = clientFromByteStreams <=< Streams.socketToStreams
+-- | Construct a pair of message streams from a 'Socket'.
+socketToHakaseStreams
+    :: Socket -> IO (InputStream Message, OutputStream Message)
+socketToHakaseStreams = Streams.socketToStreams >=> makeHakaseStreams
 
--- | Construct a 'Client' from a pair of byte streams.
-clientFromByteStreams
+
+-- | Given a pair of raw byte streams, construct a pair of streams on parsed
+-- 'Message's.
+makeHakaseStreams
     :: (InputStream ByteString, OutputStream ByteString)
-    -> IO (Client Handshaking)
-clientFromByteStreams (is, os) =
-    curry clientFromMessageStreams
-        <$> Streams.parserToInputStream parseMessage' is
+    -> IO (InputStream Message, OutputStream Message)
+makeHakaseStreams (is, os) =
+    (,) <$> Streams.parserToInputStream parseMessage' is
         <*> Streams.contramap renderMessage os
   where
     parseMessage' = Nothing <$ endOfInput <|> Just <$> parseMessage
 
--- | Construct a 'Client' from streams of parsed messages.
-clientFromMessageStreams
-    :: (InputStream Message, OutputStream Message)
-    -> Client Handshaking
-clientFromMessageStreams (is, os) = Client
-    { maybeRecv = Streams.read is
-    , send = \message -> Streams.write (Just message) os
-    , clientMoves = Handshaking
-    , clientName = Handshaking
-    }
 
-
-accept :: Chan (Client Ready, MVar Invite) -> Client Handshaking -> IO ()
-accept lobbyChan client = do
+accept
+    :: Chan (Client Ready, MVar Invite)
+    -> (InputStream Message, OutputStream Message)
+    -> IO ()
+accept lobbyChan (is, os) = do
+    let client = Client
+            { maybeRecv = Streams.read is
+            , send = \message -> Streams.write (Just message) os
+            , clientMoves = Handshaking
+            , clientName = Handshaking
+            }
     -- Perform the handshake
     client' <- handshake client
     -- Wait for a challenger to appear

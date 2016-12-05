@@ -13,12 +13,13 @@ import Hakase.Server
 main :: IO ()
 main = do
     (hp, port) <- execParser opts
-    hakaseServer $ \k ->
+    hakaseServer $ \continue ->
         listen hp port $ \(lsock, laddr) -> do
             putStrLn $ "starting server on " ++ show laddr
             forever $ acceptFork lsock $ \(sock, addr) -> do
                 putStrLn $ "client connected: " ++ show addr
-                k =<< clientFromSocket sock
+                st <- socketToHakaseStreams sock
+                continue st
   where
     opts = info (helper <*> args)
         ( fullDesc
