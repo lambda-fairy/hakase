@@ -18,16 +18,20 @@ library
     exposed-modules:
         Hakase.Server
     other-modules:
+        Hakase.Server.State
         Paths_hakase_server
     build-depends:
         base >= 4.9 && < 5,
+        acid-state,
         attoparsec,
         bytestring,
         containers,
         exceptions,
         hakase-common,
         io-streams,
+        mtl,
         network,
+        safecopy,
         text,
         tf-random
     default-language: Haskell2010
