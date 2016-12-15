@@ -18,6 +18,8 @@ library
     exposed-modules:
         Hakase.Server
     other-modules:
+        Hakase.Server.Arena
+        Hakase.Server.Common
         Hakase.Server.State
         Paths_hakase_server
     build-depends:

@@ -13,19 +13,11 @@ import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (Text)
 
-import Hakase.Common
+import Hakase.Server.Common
 
 
--- Orphan instance!! >_<
+-- Orphan instances!! >_<
 deriveSafeCopy 0 'base ''Move
-
-
-data Battle = Battle
-    { battleWhite :: !Text
-    , battleBlack :: !Text
-    , battleMoves :: ![(Move, Move)]
-    } deriving Show
-
 deriveSafeCopy 0 'base ''Battle
 
 
