@@ -49,7 +49,7 @@ hakaseServer
     :: (((InputStream Message, OutputStream Message) -> IO ()) -> IO r)
     -> IO r
 hakaseServer k = do
-    lobbyChan <- newChan
+    lobbyChan <- newChan  -- moe desu
     bracket (forkIO $ matchmaker lobbyChan) killThread $ \_ ->
         k (accept lobbyChan)
 
