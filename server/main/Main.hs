@@ -26,7 +26,8 @@ main = do
                         putStrLn $ "client connected: " ++ show addr
                         st <- socketToHakaseStreams sock
                         continue st
-            , configCheckPlayer = query acid . CheckPlayer
+            , configCheckPlayer = \name secret ->
+                query acid $ CheckPlayer name secret
             , configRecordBattle = update acid . RecordBattle
             , configNumberOfMoves = 10
             })

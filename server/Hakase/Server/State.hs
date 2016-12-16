@@ -17,8 +17,8 @@ import Data.Acid
 import Data.SafeCopy
 import Data.IntMap.Strict (IntMap)
 import qualified Data.IntMap.Strict as IntMap
-import Data.Set (Set)
-import qualified Data.Set as Set
+import Data.Map.Strict (Map)
+import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 
 import Hakase.Server.Common
@@ -34,8 +34,8 @@ deriveSafeCopy 0 'base ''Battle
 -- This comprises the set of registered players, as well as a log of all past
 -- battles.
 data ServerState = ServerState
-    { statePlayers :: !(Set Text)
-        -- ^ The set of registered players.
+    { statePlayers :: !(Map Text Text)
+        -- ^ The set of registered players. Maps each player to their secret.
     , stateBattles :: !(IntMap Battle)
         -- ^ Maps every battle ID to a corresponding battle.
     } deriving Show
@@ -45,23 +45,25 @@ deriveSafeCopy 0 'base ''ServerState
 -- | An empty server state.
 defaultServerState :: ServerState
 defaultServerState = ServerState
-    { statePlayers = Set.empty
+    { statePlayers = Map.empty
     , stateBattles = IntMap.empty
     }
 
 
--- | Try to register a player with the given name.
+-- | Try to register a player with the given name and secret.
 --
 -- Returns True on success, or False if the name is already taken.
-registerPlayer :: Text -> Update ServerState Bool
-registerPlayer name = state $ \s ->
-    if Set.member name (statePlayers s)
+registerPlayer :: Text -> Text -> Update ServerState Bool
+registerPlayer name secret = state $ \s ->
+    if Map.member name (statePlayers s)
         then (False, s)
-        else (True, s { statePlayers = Set.insert name (statePlayers s) })
+        else (True, s { statePlayers = Map.insert name secret (statePlayers s) })
 
--- | Check if a player has been registered.
-checkPlayer :: Text -> Query ServerState Bool
-checkPlayer name = Set.member name . statePlayers <$> ask
+-- | Check if a player has been registered, and that their secret matches that
+-- in the database.
+checkPlayer :: Text -> Text -> Query ServerState Bool
+checkPlayer name secret =
+    (== Just secret) . Map.lookup name . statePlayers <$> ask
 
 -- | Record the outcome of an epic battle.
 recordBattle :: Battle -> Update ServerState ()

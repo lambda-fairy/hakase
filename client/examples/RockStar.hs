@@ -5,4 +5,4 @@
 import Hakase.Client
 
 main :: IO ()
-main = hakase (\_ _ -> (Rock, ())) (\_ _ -> (Rock, ())) "RockStar"
+main = hakase (\_ _ -> (Rock, ())) (\_ _ -> (Rock, ())) "RockStar" "test"

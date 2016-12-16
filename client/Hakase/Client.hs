@@ -44,6 +44,8 @@ hakase
         -- ^ Given the opponent's last move, compute the next move
     -> Text
         -- ^ Client name
+    -> Text
+        -- ^ Client secret
     -> m ()
 hakase init next =
     hakaseM
@@ -60,8 +62,12 @@ hakaseM
         -- ^ Given the opponent's last move, compute the next move
     -> Text
         -- ^ Client name
+    -> Text
+        -- ^ Client secret
     -> m ()
-hakaseM init next name = liftIO (execParser opts) >>= hakaseM' init next name
+hakaseM init next name secret = do
+    hostPort <- liftIO (execParser opts)
+    hakaseM' init next name secret hostPort
   where
     opts = info (helper <*> args)
         ( fullDesc
@@ -84,12 +90,12 @@ hakaseM init next name = liftIO (execParser opts) >>= hakaseM' init next name
 
 hakaseM'
     :: (MonadIO m, MonadMask m)
-    => (Text -> Int -> m (Move, s)) -> (Move -> s -> m (Move, s)) -> Text
+    => (Text -> Int -> m (Move, s)) -> (Move -> s -> m (Move, s)) -> Text -> Text
     -> (HostName, ServiceName) -> m ()
-hakaseM' init next name (host, port) = connect host port $ \h -> do
+hakaseM' init next name secret (host, port) = connect host port $ \h -> do
     (opponent, numMoves) <- liftIO $ do
         -- Perform the handshake
-        send h $ Hello name protocolVersion
+        send h $ Hello protocolVersion name secret
         Welcome server <- recv h
         Text.putStrLn $ "connected to server " <> server
         -- Wait for a challenger

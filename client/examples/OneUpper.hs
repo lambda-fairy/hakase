@@ -11,5 +11,6 @@ main = hakase
     (\_ _ -> (Rock, ()))
     (\lastMove () -> (dominator lastMove, ()))
     "OneUpper"
+    "test"
   where
     dominator m = toEnum ((fromEnum m + 1) `mod` 3)

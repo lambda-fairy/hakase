@@ -58,7 +58,7 @@ hakaseServer c = do
 
 data ServerConfig r = ServerConfig
     { configListenClients :: ((InputStream Message, OutputStream Message) -> IO ()) -> IO r
-    , configCheckPlayer :: Text -> IO Bool
+    , configCheckPlayer :: Text -> Text -> IO Bool
     , configRecordBattle :: Battle -> IO ()
     , configNumberOfMoves :: Word32
     }
@@ -193,8 +193,8 @@ kick client reason = do
 handshake :: ServerConfig r -> Client Handshaking -> IO (Client Ready)
 handshake c client =
     recv client >>= \message -> case message of
-        Hello name version | version == protocolVersion -> do
-            ok <- configCheckPlayer c name
+        Hello version name secret | version == protocolVersion -> do
+            ok <- configCheckPlayer c name secret
             when (not ok) $ kick client "authentication failed"
             send client $ Welcome (Text.pack hakaseVersion)
             moves <- newChan
@@ -202,7 +202,7 @@ handshake c client =
                 { clientName = Ready name
                 , clientMoves = Ready moves
                 }
-        Hello _ version ->
+        Hello version _ _ ->
             kick client $ "unsupported client version: " <> textShow version
         _ ->
             kick client $ "unexpected message: " <> textShow message

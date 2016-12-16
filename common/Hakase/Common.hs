@@ -34,7 +34,10 @@ protocolVersion = 0
 
 -- | Represents a message in the Hakase protocol.
 data Message
-    = Hello { hello_clientName :: !Text, hello_clientVersion :: !Word32 }
+    = Hello
+        { hello_clientVersion :: !Word32
+        , hello_clientName :: !Text
+        , hello_clientSecret :: !Text }
         -- ^ Selamat siang. The first message sent by the client.
     | Welcome { welcome_serverName :: !Text }
         -- ^ Selamat datang. The first message sent by the server.
