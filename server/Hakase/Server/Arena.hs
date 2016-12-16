@@ -14,6 +14,7 @@ import Control.Monad
 import Data.Attoparsec.Combinator (endOfInput)
 import Data.ByteString (ByteString)
 import Data.Foldable
+import Data.Maybe
 import Data.Monoid
 import Data.Text (Text)
 import qualified Data.Text as Text
@@ -30,36 +31,36 @@ import Hakase.Server.Common
 -- | Run the Hakase server.
 --
 -- To allow for easier mocking, @hakaseServer@ doesn't listen to the network on
--- its own. Instead, the user must accept connections themselves, referring any
--- new clients to the given callback. A typical implementation may look like
--- this:
+-- its own. Instead, the user must provide a 'configListenClients' callback that
+-- listens for clients and hands them off to the main loop. A typical
+-- implementation may look like this:
 --
 -- @
--- hakaseServer $ \\continue ->
---     'forever' $ do
---         -- Accept an incoming connection
---         sock <- ...
---         'forkIO' $ do
---             -- Wrap the socket in a pair of message streams
---             st <- 'socketToHakaseStreams' sock
---             -- Hand the client off to the main loop
---             continue st
+-- hakaseServer 'ServerConfig'
+--     { 'configListenClients' = \\continue ->
+--         'forever' $ do
+--             -- Accept an incoming connection
+--             sock <- ...
+--             'forkIO' $ do
+--                 -- Wrap the socket in a pair of message streams
+--                 st <- 'socketToHakaseStreams' sock
+--                 -- Hand the client off to the main loop
+--                 continue st
+--     -- ...
+--     }
 -- @
-hakaseServer
-    :: (((InputStream Message, OutputStream Message) -> IO ()) -> IO r)
-    -> IO r
-hakaseServer k = do
+hakaseServer :: ServerConfig r -> IO r
+hakaseServer c = do
     lobbyChan <- newChan  -- moe desu
-    bracket (forkIO $ matchmaker lobbyChan) killThread $ \_ ->
-        k (accept lobbyChan)
+    bracket (forkIO $ matchmaker c lobbyChan) killThread $ \_ ->
+        configListenClients c (accept c lobbyChan)
 
 
--- FIXME: actually use this
 data ServerConfig r = ServerConfig
     { configListenClients :: ((InputStream Message, OutputStream Message) -> IO ()) -> IO r
     , configCheckPlayer :: Text -> IO Bool
     , configRecordBattle :: Battle -> IO ()
-    , configNumberOfMoves :: Int
+    , configNumberOfMoves :: Word32
     }
 
 
@@ -82,10 +83,11 @@ makeHakaseStreams (is, os) =
 
 
 accept
-    :: Chan (Client Ready, MVar Invite)
+    :: ServerConfig r
+    -> Chan (Client Ready, MVar Invite)
     -> (InputStream Message, OutputStream Message)
     -> IO ()
-accept lobbyChan (is, os) = do
+accept c lobbyChan (is, os) = do
     let client = Client
             { maybeRecv = Streams.read is
             , send = \message -> Streams.write (Just message) os
@@ -93,7 +95,7 @@ accept lobbyChan (is, os) = do
             , clientName = Handshaking
             }
     -- Perform the handshake
-    client' <- handshake client
+    client' <- handshake c client
     -- Wait for a challenger to appear
     inviteVar <- newEmptyMVar
     writeChan lobbyChan (client', inviteVar)
@@ -104,22 +106,44 @@ accept lobbyChan (is, os) = do
         `finally` writeChan (ready $ clientMoves client') Nothing
 
 
-matchmaker :: Chan (Client Ready, MVar Invite) -> IO a
-matchmaker lobbyChan = forever $ do
+matchmaker :: ServerConfig r -> Chan (Client Ready, MVar Invite) -> IO a
+matchmaker c lobbyChan = forever $ do
+    -- Pick the first two clients who arrive
+    -- FIXME(#5): do something more clever than this
     (whiteClient, whiteVar) <- readChan lobbyChan
     (blackClient, blackVar) <- readChan lobbyChan
+    -- Duplicate the event streams beforehand, so that we can record what's
+    -- going on (see below)
+    whiteMoves' <- dupChan . ready $ clientMoves whiteClient
+    blackMoves' <- dupChan . ready $ clientMoves blackClient
+    -- Start the game!
     putMVar whiteVar Invite
-        { numberOfMoves = defaultNumberOfMoves
+        { numberOfMoves = configNumberOfMoves c
         , opponentMoves = ready $ clientMoves blackClient
         , opponentName = ready $ clientName blackClient
         }
     putMVar blackVar Invite
-        { numberOfMoves = defaultNumberOfMoves
+        { numberOfMoves = configNumberOfMoves c
         , opponentMoves = ready $ clientMoves whiteClient
         , opponentName = ready $ clientName whiteClient
         }
+    -- Record the result of this epic battle!
+    void . forkIO $ do
+        white <- takeWhileJust <$> getChanContents whiteMoves'
+        black <- takeWhileJust <$> getChanContents blackMoves'
+        -- Since getChanContents is lazy, it won't read the channel until we
+        -- force the resulting list
+        _ <- evaluate $ length white
+        _ <- evaluate $ length black
+        configRecordBattle c Battle
+            { battleWhite = ready $ clientName whiteClient
+            , battleBlack = ready $ clientName blackClient
+            , battleWhiteMoves = white
+            , battleBlackMoves = black
+            }
   where
-    defaultNumberOfMoves = 10  -- lol
+    takeWhileJust :: [Maybe a] -> [a]
+    takeWhileJust = map fromJust . takeWhile isJust
 
 
 -- | Stores information relating to a particular client.
@@ -166,10 +190,12 @@ kick client reason = do
     toMaybe = getFirst . foldMap (First . Just)
 
 
-handshake :: Client Handshaking -> IO (Client Ready)
-handshake client =
+handshake :: ServerConfig r -> Client Handshaking -> IO (Client Ready)
+handshake c client =
     recv client >>= \message -> case message of
         Hello name version | version == protocolVersion -> do
+            ok <- configCheckPlayer c name
+            when (not ok) $ kick client "authentication failed"
             send client $ Welcome (Text.pack hakaseVersion)
             moves <- newChan
             return client

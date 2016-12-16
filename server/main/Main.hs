@@ -2,8 +2,10 @@
 
 module Main (main) where
 
-import Control.Monad (forever)
-import Data.Monoid ((<>))
+import Control.Exception
+import Control.Monad
+import Data.Acid
+import Data.Monoid
 import Network.Simple.TCP
 import Options.Applicative
 
@@ -13,13 +15,21 @@ import Hakase.Server
 main :: IO ()
 main = do
     (hp, port) <- execParser opts
-    hakaseServer $ \continue ->
-        listen hp port $ \(lsock, laddr) -> do
-            putStrLn $ "starting server on " ++ show laddr
-            forever $ acceptFork lsock $ \(sock, addr) -> do
-                putStrLn $ "client connected: " ++ show addr
-                st <- socketToHakaseStreams sock
-                continue st
+    bracket
+        (openLocalState defaultServerState)
+        closeAcidState
+        (\acid -> hakaseServer ServerConfig
+            { configListenClients = \continue ->
+                listen hp port $ \(lsock, laddr) -> do
+                    putStrLn $ "starting server on " ++ show laddr
+                    forever $ acceptFork lsock $ \(sock, addr) -> do
+                        putStrLn $ "client connected: " ++ show addr
+                        st <- socketToHakaseStreams sock
+                        continue st
+            , configCheckPlayer = query acid . CheckPlayer
+            , configRecordBattle = update acid . RecordBattle
+            , configNumberOfMoves = 10
+            })
   where
     opts = info (helper <*> args)
         ( fullDesc

@@ -15,7 +15,8 @@ import qualified Paths_hakase_server
 data Battle = Battle
     { battleWhite :: !Text
     , battleBlack :: !Text
-    , battleMoves :: ![(Move, Move)]
+    , battleWhiteMoves :: ![Move]
+    , battleBlackMoves :: ![Move]
     } deriving Show
 
 

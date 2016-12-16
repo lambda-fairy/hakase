@@ -44,6 +44,7 @@ executable hakase-server
     main-is: Main.hs
     build-depends:
         base,
+        acid-state,
         hakase-server,
         network-simple,
         optparse-applicative

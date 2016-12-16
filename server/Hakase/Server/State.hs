@@ -1,7 +1,15 @@
 {-# LANGUAGE TemplateHaskell, TypeFamilies #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
 
-module Hakase.Server.State where
+module Hakase.Server.State
+    ( ServerState()
+    , defaultServerState
+    , RegisterPlayer(..)
+    , CheckPlayer(..)
+    , RecordBattle(..)
+    , QueryBattle(..)
+    , PlayerBattles(..)
+    ) where
 
 import Control.Monad.Reader
 import Control.Monad.State
@@ -21,6 +29,10 @@ deriveSafeCopy 0 'base ''Move
 deriveSafeCopy 0 'base ''Battle
 
 
+-- | Represents the persistent state maintained by the server.
+--
+-- This comprises the set of registered players, as well as a log of all past
+-- battles.
 data ServerState = ServerState
     { statePlayers :: !(Set Text)
         -- ^ The set of registered players.
@@ -29,6 +41,13 @@ data ServerState = ServerState
     } deriving Show
 
 deriveSafeCopy 0 'base ''ServerState
+
+-- | An empty server state.
+defaultServerState :: ServerState
+defaultServerState = ServerState
+    { statePlayers = Set.empty
+    , stateBattles = IntMap.empty
+    }
 
 
 -- | Try to register a player with the given name.
