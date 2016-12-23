@@ -2,6 +2,7 @@
 
 module Main (main) where
 
+import Control.Concurrent.Chan
 import Control.Exception
 import Control.Monad
 import Data.Acid
@@ -28,6 +29,12 @@ main = do
                         continue st
             , configCheckPlayer = \name secret ->
                 query acid $ CheckPlayer name secret
+            , configMatchPlayers = \lobbyChan invite -> forever $ do
+                -- Pick the first two clients who arrive
+                -- FIXME(#5): do something more clever than this
+                white <- readChan lobbyChan
+                black <- readChan lobbyChan
+                invite white black
             , configRecordBattle = update acid . RecordBattle
             , configNumberOfMoves = 10
             })

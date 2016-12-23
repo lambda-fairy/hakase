@@ -5,6 +5,8 @@ module Hakase.Server.Arena
     , ServerConfig(..)
     , socketToHakaseStreams
     , makeHakaseStreams
+    , Ticket()
+    , ticketClientName
     ) where
 
 import Control.Applicative
@@ -19,6 +21,7 @@ import Data.Monoid
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Data.Word (Word32)
+import Data.Void (Void, vacuous)
 import Network.Socket (Socket)
 import System.IO.Streams (InputStream, OutputStream)
 import qualified System.IO.Streams as Streams
@@ -52,13 +55,14 @@ import Hakase.Server.Common
 hakaseServer :: ServerConfig r -> IO r
 hakaseServer c = do
     lobbyChan <- newChan  -- moe desu
-    bracket (forkIO $ matchmaker c lobbyChan) killThread $ \_ ->
+    bracket (forkIO . vacuous $ matchmaker c lobbyChan) killThread $ \_ ->
         configListenClients c (accept c lobbyChan)
 
 
 data ServerConfig r = ServerConfig
     { configListenClients :: ((InputStream Message, OutputStream Message) -> IO ()) -> IO r
     , configCheckPlayer :: Text -> Text -> IO Bool
+    , configMatchPlayers :: Chan Ticket -> (Ticket -> Ticket -> IO ()) -> IO Void
     , configRecordBattle :: Battle -> IO ()
     , configNumberOfMoves :: Word32
     }
@@ -82,9 +86,23 @@ makeHakaseStreams (is, os) =
     parseMessage' = Nothing <$ endOfInput <|> Just <$> parseMessage
 
 
+-- | Represents a client which has registered successfully with the server, but
+-- has not yet been assigned to a game.
+data Ticket = Ticket
+    { ticketClient :: !(Client Ready)
+        -- ^ The client who is waiting for a game.
+    , _ticketInvite :: !(MVar Invite)
+        -- ^ When this variable is filled, the game will begin.
+    }
+
+-- | Get the name of the client for this ticket.
+ticketClientName :: Ticket -> Text
+ticketClientName = ready . clientName . ticketClient
+
+
 accept
     :: ServerConfig r
-    -> Chan (Client Ready, MVar Invite)
+    -> Chan Ticket
     -> (InputStream Message, OutputStream Message)
     -> IO ()
 accept c lobbyChan (is, os) = do
@@ -98,7 +116,7 @@ accept c lobbyChan (is, os) = do
     client' <- handshake c client
     -- Wait for a challenger to appear
     inviteVar <- newEmptyMVar
-    writeChan lobbyChan (client', inviteVar)
+    writeChan lobbyChan $ Ticket client' inviteVar
     invite <- takeMVar inviteVar
     -- Play the game!
     loop invite client'
@@ -106,16 +124,14 @@ accept c lobbyChan (is, os) = do
         `finally` writeChan (ready $ clientMoves client') Nothing
 
 
-matchmaker :: ServerConfig r -> Chan (Client Ready, MVar Invite) -> IO a
-matchmaker c lobbyChan = forever $ do
-    -- Pick the first two clients who arrive
-    -- FIXME(#5): do something more clever than this
-    (whiteClient, whiteVar) <- readChan lobbyChan
-    (blackClient, blackVar) <- readChan lobbyChan
+matchmaker :: ServerConfig r -> Chan Ticket -> IO Void
+matchmaker c lobbyChan = configMatchPlayers c lobbyChan $ \white black -> do
+    let Ticket whiteClient whiteVar = white
+    let Ticket blackClient blackVar = black
     -- Duplicate the event streams beforehand, so that we can record what's
     -- going on (see below)
-    whiteMoves' <- dupChan . ready $ clientMoves whiteClient
-    blackMoves' <- dupChan . ready $ clientMoves blackClient
+    whiteMoves <- dupChan . ready $ clientMoves whiteClient
+    blackMoves <- dupChan . ready $ clientMoves blackClient
     -- Start the game!
     putMVar whiteVar Invite
         { numberOfMoves = configNumberOfMoves c
@@ -129,17 +145,17 @@ matchmaker c lobbyChan = forever $ do
         }
     -- Record the result of this epic battle!
     void . forkIO $ do
-        white <- takeWhileJust <$> getChanContents whiteMoves'
-        black <- takeWhileJust <$> getChanContents blackMoves'
+        whiteMoves' <- takeWhileJust <$> getChanContents whiteMoves
+        blackMoves' <- takeWhileJust <$> getChanContents blackMoves
         -- Since getChanContents is lazy, it won't read the channel until we
         -- force the resulting list
-        _ <- evaluate $ length white
-        _ <- evaluate $ length black
+        _ <- evaluate $ length whiteMoves'
+        _ <- evaluate $ length blackMoves'
         configRecordBattle c Battle
             { battleWhite = ready $ clientName whiteClient
             , battleBlack = ready $ clientName blackClient
-            , battleWhiteMoves = white
-            , battleBlackMoves = black
+            , battleWhiteMoves = whiteMoves'
+            , battleBlackMoves = blackMoves'
             }
   where
     takeWhileJust :: [Maybe a] -> [a]
